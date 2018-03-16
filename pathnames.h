@@ -28,6 +28,10 @@
 #define PATH_RADVD_LOG "/var/log/radvd.log"
 #endif
 
+#ifndef LOG_FACILITY
+#define LOG_FACILITY 0
+#endif
+
 #define PATH_PROC_NET_IF_INET6 "/proc/net/if_inet6"
 #define PATH_PROC_NET_IGMP6 "/proc/net/igmp6"
 

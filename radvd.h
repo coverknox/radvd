@@ -21,6 +21,8 @@
 #include "defaults.h"
 #include "log.h"
 
+#include <cutils/properties.h>
+
 #define CONTACT_EMAIL	"Pekka Savola <pekkas@netcore.fi>"
 
 extern int sock;

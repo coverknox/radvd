@@ -72,7 +72,11 @@
 
 #include <arpa/inet.h>
 
-#include <sys/sysctl.h>
+#ifdef ANDROID_CHANGES
+# include "sysctl.h"
+#else
+# include <sys/sysctl.h>
+#endif
 
 #include <net/if.h>
 

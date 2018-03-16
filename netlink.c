@@ -28,6 +28,35 @@
 #include <errno.h>
 #include <string.h>
 
+static int set_last_prefix(const char * ifname){
+	char prefix_prop_name[PROPERTY_KEY_MAX];
+	char plen_prop_name[PROPERTY_KEY_MAX];
+	char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
+
+	if (property_get("net.ipv6.tether", prop_value, NULL)) {
+		if(0 == strcmp(prop_value, ifname)){
+			dlog(LOG_DEBUG, 3, "set last prefix for %s", ifname);
+		} else{
+		    dlog(LOG_DEBUG, 3, "%s is not tether interface", ifname);
+			return 0;
+		}
+	}
+
+	snprintf(prefix_prop_name, sizeof(prefix_prop_name),
+		"net.ipv6.%s.prefix", ifname);
+	if (property_get(prefix_prop_name, prop_value, NULL)) {
+			property_set(prefix_prop_name, "");
+			//set last prefix
+			property_set("net.ipv6.lastprefix", prop_value);
+	}
+	snprintf(plen_prop_name, sizeof(plen_prop_name),
+		"net.ipv6.%s.plen", ifname);
+	if (property_get(plen_prop_name, prop_value, NULL)) {
+			property_set(plen_prop_name, "");
+	}
+	return 0;
+}
+
 void process_netlink_msg(int sock)
 {
 	int len;
@@ -62,6 +91,7 @@ void process_netlink_msg(int sock)
 		}
 		else {
 			dlog(LOG_DEBUG, 3, "%s, ifindex %d, flags is *NOT* running", ifname, ifinfo->ifi_index);
+			set_last_prefix(ifname);
 		}
 		reload_config();
 	}

@@ -90,6 +90,7 @@ open_icmpv6_socket(void)
 	 * setup ICMP filter
 	 */
 
+#ifdef ICMP6_FILTER
 	ICMP6_FILTER_SETBLOCKALL(&filter);
 	ICMP6_FILTER_SETPASS(ND_ROUTER_SOLICIT, &filter);
 	ICMP6_FILTER_SETPASS(ND_ROUTER_ADVERT, &filter);
@@ -101,6 +102,7 @@ open_icmpv6_socket(void)
 		flog(LOG_ERR, "setsockopt(ICMPV6_FILTER): %s", strerror(errno));
 		return (-1);
 	}
+#endif
 
 	return sock;
 }

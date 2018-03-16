@@ -24,6 +24,10 @@
 
 #include <poll.h>
 
+#include <private/android_filesystem_config.h>
+#include <linux/capability.h>
+#include <fcntl.h>
+#include <sys/prctl.h>
 struct Interface *IfaceList = NULL;
 
 #ifdef HAVE_GETOPT_LONG
@@ -96,6 +100,7 @@ int check_conffile_perm(const char *, const char *);
 pid_t strtopid(char const * pidstr);
 void write_pid_file(char const *);
 void main_loop(void);
+static void set_cap_netAdmin(void);
 
 int
 main(int argc, char *argv[])
@@ -120,6 +125,8 @@ main(int argc, char *argv[])
 	conf_file = PATH_RADVD_CONF;
 	facility = LOG_FACILITY;
 	pidfile = PATH_RADVD_PID;
+
+	set_cap_netAdmin();
 
 	/* parse args */
 #define OPTIONS_STR "d:C:l:m:p:t:u:vhcsn"
@@ -464,6 +471,8 @@ void main_loop(void)
 		{
 			dlog(LOG_INFO, 3, "sig usr1 received.\n");
 			reset_prefix_lifetimes();
+			/*set lift == 0 RA */
+			kickoff_adverts();
 			sigusr1_received = 0;
 		}
 
@@ -692,15 +701,15 @@ void reset_prefix_lifetimes(void)
 		for (prefix = iface->AdvPrefixList; prefix;
 							prefix = prefix->next) 
 		{
-			if (prefix->DecrementLifetimesFlag)
+			if (1 || prefix->DecrementLifetimesFlag)
 			{
 				print_addr(&prefix->Prefix, pfx_str);
 				dlog(LOG_DEBUG, 4, "%s/%u%%%s plft reset from %u to %u secs", pfx_str, prefix->PrefixLen, iface->Name, prefix->curr_preferredlft, prefix->AdvPreferredLifetime);
 				dlog(LOG_DEBUG, 4, "%s/%u%%%s vlft reset from %u to %u secs", pfx_str, prefix->PrefixLen, iface->Name, prefix->curr_validlft, prefix->AdvValidLifetime);
 				prefix->curr_validlft =
-						prefix->AdvValidLifetime;
+						0;
 				prefix->curr_preferredlft =
-						prefix->AdvPreferredLifetime;
+						0;
 			}
 		}
 		
@@ -777,7 +786,7 @@ int
 check_ip6_forwarding(void)
 {
 	int forw_sysctl[] = { SYSCTL_IP6_FORWARDING };
-	int value;
+	int value = 0;
 	size_t size = sizeof(value);
 	FILE *fp = NULL;
 	static int warned = 0;
@@ -790,14 +799,23 @@ check_ip6_forwarding(void)
 			flog(LOG_ERR, "cannot read value from %s: %s", PROC_SYS_IP6_FORWARDING, strerror(errno));
 			exit(1);
 		}
+#ifndef ANDROID_CHANGES
+		if(value != 1 && value != 2){
+		    flog(LOG_DEBUG, "IPv6 forwarding setting is: %u, should be 1 or 2", value);
+		    return(-1);
+		}
+#endif
 		fclose(fp);
 	}
-	else
+	else {
 		flog(LOG_DEBUG, "Correct IPv6 forwarding procfs entry not found, "
 	                       "perhaps the procfs is disabled, "
 	                        "or the kernel interface has changed?");
-#endif /* __linux__ */
+	    return (-1);
+    }
+#endif
 
+#ifndef ANDROID_CHANGES
 	if (!fp && sysctl(forw_sysctl, sizeof(forw_sysctl)/sizeof(forw_sysctl[0]),
 	    &value, &size, NULL, 0) < 0) {
 		flog(LOG_DEBUG, "Correct IPv6 forwarding sysctl branch not found, "
@@ -810,6 +828,7 @@ check_ip6_forwarding(void)
 		flog(LOG_DEBUG, "IPv6 forwarding setting is: %u, should be 1", value);
 		return(-1);
 	}
+#endif
 
 	return(0);
 }
@@ -831,6 +850,45 @@ readin_config(char *fname)
 
 	fclose(yyin);
 	return 0;
+}
+
+static void
+set_cap_netAdmin(void)
+{
+	struct __user_cap_header_struct header;
+	struct __user_cap_data_struct cap;
+	header.version = _LINUX_CAPABILITY_VERSION;
+	header.pid = 0;
+
+	gid_t groups[] = { AID_DHCP, AID_LOG, AID_INPUT, AID_INET,
+                       AID_SYSTEM, AID_NET_RAW, AID_NET_ADMIN, AID_RADIO };
+    setgroups(sizeof(groups)/sizeof(groups[0]), groups);
+	prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+
+    if(setgid(AID_SYSTEM) != 0)
+        flog(LOG_ERR, "setgid system failed!");
+    if(setuid(AID_SYSTEM) != 0)
+        flog(LOG_ERR, "setuid system failed!");
+		if (capget(&header, &cap) < 0) {
+         flog(LOG_ERR, "Failed capget");
+         return;
+     }
+	cap.effective |= (1 << CAP_NET_RAW |
+					1 << CAP_NET_ADMIN |
+					1 << CAP_NET_BIND_SERVICE |
+                    1 << CAP_SYS_BOOT);
+
+	cap.permitted |=  (1 << CAP_NET_RAW |
+					1 << CAP_NET_ADMIN |
+					1 << CAP_NET_BIND_SERVICE |
+                    1 << CAP_SYS_BOOT) ;
+
+   if (capset(&header, &cap) < 0) {
+         flog(LOG_ERR, "Failed capset");
+         return;
+     }
+
+   flog(LOG_INFO, "set cap net_admin exit");
 }
 
 void

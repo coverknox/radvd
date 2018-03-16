@@ -16,6 +16,10 @@
 #include "includes.h"
 #include "radvd.h"
 
+#ifdef ANDROID_CHANGES
+#include <android/log.h>
+#endif
+
 static int	log_method = L_NONE;
 static char *log_ident;
 static char *log_file;
@@ -116,9 +120,21 @@ dlog(int prio, int level, char *format, ...)
 	if (debug_level < level)
 		return;
 
+#ifdef ANDROID_CHANGES
+	if (prio == LOG_DEBUG){
+		va_start(ap, format);
+		__android_log_vprint(ANDROID_LOG_DEBUG, "radvd", format, ap);
+		va_end(ap);
+	}else{
+		va_start(ap, format);
+		__android_log_vprint(ANDROID_LOG_INFO, "radvd", format, ap);
+		va_end(ap);
+	}
+#else
 	va_start(ap, format);
 	vlog(prio, format, ap);
 	va_end(ap);
+#endif
 }
 
 void
@@ -126,9 +142,21 @@ flog(int prio, char *format, ...)
 {
 	va_list ap;
 
+#ifdef ANDROID_CHANGES
+	if (prio == LOG_ERR){
+		va_start(ap, format);
+		__android_log_vprint(ANDROID_LOG_ERROR, "radvd", format, ap);
+		va_end(ap);
+	}else{
+		va_start(ap, format);
+		__android_log_vprint(ANDROID_LOG_INFO, "radvd", format, ap);
+		va_end(ap);
+	}
+#else
 	va_start(ap, format);
 	vlog(prio, format, ap);
 	va_end(ap);
+#endif
 }
 
 int
